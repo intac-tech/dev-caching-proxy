@@ -1,8 +1,11 @@
 package tech.intac.devtools.cachingproxy;
 
+import java.io.ByteArrayInputStream;
+import java.io.FileInputStream;
 import java.io.FileOutputStream;
 import java.io.FileReader;
 import java.io.IOException;
+import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.URI;
 import java.net.URL;
@@ -20,35 +23,39 @@ import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.io.IOUtils;
-import org.eclipse.jetty.util.security.Credential;
 
 public class ProxyServlet extends HttpServlet {
 
     protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         var config = Config.getInstance();
         var requestMethod = request.getMethod().toLowerCase();
+        var reqBody = String.join("\n", IOUtils.readLines(request.getInputStream()));
 
-        if (("get".equals(requestMethod) && config.isCacheGetRequests()) ||
-                ("post".equals(requestMethod) && config.isCachePostRequests())) {
+        checkIfPassThrough:
+        {
+            if ("get".equals(requestMethod) && config.isCacheGetRequests()) {
+                break checkIfPassThrough;
+            }
+
+            if ("post".equals(requestMethod) && config.isCachePostRequests()) {
+                break checkIfPassThrough;
+            }
+
             try {
-                passThrough(config, request, response);
+                var remoteResponse = sendRemoteRequest(config, request, reqBody);
+                IOUtils.copyLarge(remoteResponse.body(), response.getOutputStream());
             } catch (Exception e) {
                 throw new RuntimeException(e);
             }
             return;
         }
 
-        var reqBody = String.join("\n", IOUtils.readLines(request.getInputStream()));
-
-        var requestId = request.getQueryString() + reqBody;
-        var checksum = Credential.MD5.digest(requestId).replace(":", "_");
-        var reqUri = request.getRequestURI().toString();
-
-        var localPath = LocalCacheResolver.resolve(new URL(config.getBaseUrl() + reqUri));
+        var cacheFolderName = LocalCacheResolver.generateCacheFolderName(request, requestMethod, reqBody);
+        var localPath = LocalCacheResolver.resolve(new URL(config.getBaseUrl() + request.getRequestURI()));
 
         var localResponseFolder = config.
                 getLocalOverridesPath().resolve(localPath)
-                .resolve(checksum);
+                .resolve(cacheFolderName);
 
         if (!Files.exists(localResponseFolder)) {
             localResponseFolder.toFile().mkdirs();
@@ -72,56 +79,50 @@ public class ProxyServlet extends HttpServlet {
         }
 
         try {
-            var client = HttpClient.newBuilder().build();
-            var remoteUri = new URI(config.getBaseUrl() + request.getRequestURI() +
-                    (request.getQueryString() != null ? "?" + request.getQueryString() : ""));
+            var remoteResponse = sendRemoteRequest(config, request, reqBody);
+            remoteResponse.headers().map()
+                    .forEach((k, v) -> cachedRespHeaders.put(k, v.size() > 0 ? v.get(0) : ""));
 
-            var reqbldr = HttpRequest.newBuilder()
-                    .uri(remoteUri);
-
-            if ("get".equals(requestMethod)) {
-                reqbldr.GET();
-            } else {
-                reqbldr.POST(HttpRequest.BodyPublishers.ofString(reqBody));
+            // cache the response headers
+            try (OutputStream os = new FileOutputStream(cachedRespHeadersPath.toFile())) {
+                cachedRespHeaders.store(os, "cached headers @ " + new Date());
             }
 
+            // cache the response
+            try (OutputStream os = new FileOutputStream(cachedRespContentPath.toFile())) {
+                IOUtils.copyLarge(remoteResponse.body(), os);
+            }
+
+            // send the file to the http request
+            try (InputStream is = new FileInputStream(cachedRespContentPath.toFile())) {
+                IOUtils.copyLarge(is, response.getOutputStream());
+            }
+
+            // store the request details
             var cachedReqHeadersPath = localResponseFolder.resolve("request_headers");
             var cachedReqContentPath = localResponseFolder.resolve("request_body");
             var cachedReqHeaders = new Properties();
 
             request.getHeaderNames().asIterator()
                     .forEachRemaining(headerName -> {
-                        try {
-                            var value = request.getHeader(headerName);
-                            cachedReqHeaders.setProperty(headerName, value);
-                            reqbldr.header(headerName, value);
-                        } catch (Exception ex) {
-                            log("Ingored header: " + headerName);
-                        }
+                        var value = request.getHeader(headerName);
+                        cachedReqHeaders.setProperty(headerName, value);
                     });
 
-            var remoteResponse = client.send(reqbldr.build(), HttpResponse.BodyHandlers.ofFile(cachedRespContentPath));
-            remoteResponse.headers().map()
-                    .forEach((k, v) -> cachedRespHeaders.put(k, v.size() > 0 ? v.get(0) : ""));
-
-            try (OutputStream os = new FileOutputStream(cachedRespHeadersPath.toFile())) {
-                cachedRespHeaders.store(os, "cached headers @ " + new Date());
-            }
-
-            Files.copy(cachedRespContentPath, response.getOutputStream());
-
-            // store the request
             try (OutputStream os = new FileOutputStream(cachedReqHeadersPath.toFile())) {
                 cachedReqHeaders.store(os, "cached headers @ " + new Date());
             }
 
-            Files.write(cachedReqContentPath, reqBody.getBytes(StandardCharsets.UTF_8));
+            try (OutputStream os = new FileOutputStream(cachedReqContentPath.toFile())) {
+                var contentInBytes = reqBody.getBytes(StandardCharsets.UTF_8);
+                IOUtils.copyLarge(new ByteArrayInputStream(contentInBytes), os);
+            }
         } catch (Throwable t) {
             throw new IllegalStateException(t);
         }
     }
 
-    private void passThrough(Config config, HttpServletRequest request, HttpServletResponse response) throws Exception {
+    private HttpResponse<InputStream> sendRemoteRequest(Config config, HttpServletRequest request, String reqBody) throws Exception {
         var client = HttpClient.newBuilder().build();
         var remoteUri = new URI(config.getBaseUrl() + request.getRequestURI() +
                 (request.getQueryString() != null ? "?" + request.getQueryString() : ""));
@@ -132,13 +133,7 @@ public class ProxyServlet extends HttpServlet {
         if (request.getMethod().equalsIgnoreCase("get")) {
             reqbldr.GET();
         } else {
-            reqbldr.POST(HttpRequest.BodyPublishers.ofInputStream(() -> {
-                try {
-                    return request.getInputStream();
-                } catch (IOException e) {
-                    throw new RuntimeException(e);
-                }
-            }));
+            reqbldr.POST(HttpRequest.BodyPublishers.ofString(reqBody));
         }
 
         request.getHeaderNames().asIterator()
@@ -147,11 +142,10 @@ public class ProxyServlet extends HttpServlet {
                         var value = request.getHeader(headerName);
                         reqbldr.header(headerName, value);
                     } catch (Exception ex) {
-                        log("Ingored header: " + headerName);
+                        // do nothing
                     }
                 });
 
-        var remoteResponse = client.send(reqbldr.build(), HttpResponse.BodyHandlers.ofInputStream());
-        IOUtils.copyLarge(remoteResponse.body(), response.getOutputStream());
+        return client.send(reqbldr.build(), HttpResponse.BodyHandlers.ofInputStream());
     }
 }

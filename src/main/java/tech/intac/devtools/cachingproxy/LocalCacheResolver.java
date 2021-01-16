@@ -4,6 +4,11 @@ import java.net.URL;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 import java.util.ArrayList;
+import java.util.Arrays;
+
+import javax.servlet.http.HttpServletRequest;
+
+import org.eclipse.jetty.util.security.Credential;
 
 public class LocalCacheResolver {
 
@@ -12,12 +17,14 @@ public class LocalCacheResolver {
         parts.add(url.getProtocol());
         parts.add(url.getHost());
         parts.add(url.getPort() + "");
-        parts.add(url.getPath().replace("/", "_"));
-
-        if (parts.size() == 1) {
-            return Paths.get(parts.get(0));
-        }
+        parts.addAll(Arrays.asList(url.getPath().split("/")));
 
         return Paths.get(parts.remove(0), parts.toArray(String[]::new));
+    }
+
+    static String generateCacheFolderName(HttpServletRequest request, String requestMethod, String reqBody) {
+        var requestId = String.join("_", request.getQueryString(), reqBody);
+        var checksum = Credential.MD5.digest(requestId).replace(":", "_");
+        return String.join("_", requestMethod, checksum);
     }
 }
