@@ -57,16 +57,17 @@ public class Config implements Serializable {
         return instance;
     }
 
+    private String baseUrl = "http://host:port";
+
+    private String _localOverridesPath;
+    transient private Path localOverridesPath;
+
+    private boolean cacheGetRequests = true;
+    private boolean cachePostRequests = false;
+
     private Config() {
+        _localOverridesPath = configPath.resolveSibling("cache").toString();
     }
-
-    public String baseUrl = "http://host:port";
-
-    public Path localOverridesPath = configPath.resolveSibling("cache");
-
-    public boolean cacheGetRequests = true;
-
-    public boolean cachePostRequests = false;
 
     public void save() {
         if (configPath == null) {
@@ -81,4 +82,39 @@ public class Config implements Serializable {
         }
     }
 
+    public String getBaseUrl() {
+        return baseUrl;
+    }
+
+    public void setBaseUrl(String baseUrl) {
+        this.baseUrl = baseUrl;
+    }
+
+    public Path getLocalOverridesPath() {
+        if (localOverridesPath == null) {
+            localOverridesPath = Paths.get(_localOverridesPath);
+        }
+        return localOverridesPath;
+    }
+
+    public void setLocalOverridesPath(Path localOverridesPath) {
+        this.localOverridesPath = localOverridesPath;
+        this._localOverridesPath = localOverridesPath.toString();
+    }
+
+    public boolean isCacheGetRequests() {
+        return cacheGetRequests;
+    }
+
+    public void setCacheGetRequests(boolean cacheGetRequests) {
+        this.cacheGetRequests = cacheGetRequests;
+    }
+
+    public boolean isCachePostRequests() {
+        return cachePostRequests;
+    }
+
+    public void setCachePostRequests(boolean cachePostRequests) {
+        this.cachePostRequests = cachePostRequests;
+    }
 }

@@ -5,7 +5,6 @@ import java.io.FileReader;
 import java.io.IOException;
 import java.io.OutputStream;
 import java.net.URI;
-import java.net.URISyntaxException;
 import java.net.URL;
 import java.net.http.HttpClient;
 import java.net.http.HttpRequest;
@@ -14,7 +13,6 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Date;
 import java.util.Properties;
-import java.util.stream.Collectors;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
@@ -30,8 +28,8 @@ public class ProxyServlet extends HttpServlet {
         var config = Config.getInstance();
         var requestMethod = request.getMethod().toLowerCase();
 
-        if (("get".equals(requestMethod) && config.cacheGetRequests) ||
-                ("post".equals(requestMethod) && config.cachePostRequests)) {
+        if (("get".equals(requestMethod) && config.isCacheGetRequests()) ||
+                ("post".equals(requestMethod) && config.isCachePostRequests())) {
             try {
                 passThrough(config, request, response);
             } catch (Exception e) {
@@ -46,10 +44,10 @@ public class ProxyServlet extends HttpServlet {
         var checksum = Credential.MD5.digest(requestId).replace(":", "_");
         var reqUri = request.getRequestURI().toString();
 
-        var localPath = LocalCacheResolver.resolve(new URL(config.baseUrl + reqUri));
+        var localPath = LocalCacheResolver.resolve(new URL(config.getBaseUrl() + reqUri));
 
         var localResponseFolder = config.
-                localOverridesPath.resolve(localPath)
+                getLocalOverridesPath().resolve(localPath)
                 .resolve(checksum);
 
         if (!Files.exists(localResponseFolder)) {
@@ -75,7 +73,7 @@ public class ProxyServlet extends HttpServlet {
 
         try {
             var client = HttpClient.newBuilder().build();
-            var remoteUri = new URI(config.baseUrl + request.getRequestURI() +
+            var remoteUri = new URI(config.getBaseUrl() + request.getRequestURI() +
                     (request.getQueryString() != null ? "?" + request.getQueryString() : ""));
 
             var reqbldr = HttpRequest.newBuilder()
@@ -125,7 +123,7 @@ public class ProxyServlet extends HttpServlet {
 
     private void passThrough(Config config, HttpServletRequest request, HttpServletResponse response) throws Exception {
         var client = HttpClient.newBuilder().build();
-        var remoteUri = new URI(config.baseUrl + request.getRequestURI() +
+        var remoteUri = new URI(config.getBaseUrl() + request.getRequestURI() +
                 (request.getQueryString() != null ? "?" + request.getQueryString() : ""));
 
         var reqbldr = HttpRequest.newBuilder()
