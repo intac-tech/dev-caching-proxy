@@ -22,9 +22,9 @@ public class LocalCacheResolver {
         return Paths.get(parts.remove(0), parts.toArray(String[]::new));
     }
 
-    static String generateCacheFolderName(HttpServletRequest request, String requestMethod, String reqBody) {
+    static String generateCacheFolderName(HttpServletRequest request, String reqBody) {
         var requestId = String.join("_", request.getQueryString(), reqBody);
         var checksum = Credential.MD5.digest(requestId).replace(":", "_");
-        return String.join("_", requestMethod, checksum);
+        return String.join("_", request.getMethod().toLowerCase(), checksum);
     }
 }

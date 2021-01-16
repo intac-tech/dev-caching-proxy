@@ -2,6 +2,8 @@ package tech.intac.devtools.cachingproxy;
 
 import java.util.logging.Logger;
 
+import javax.swing.*;
+
 public class Main {
 
     private static final Logger log = Logger.getLogger(Main.class.getName());
@@ -19,6 +21,12 @@ public class Main {
                 e.printStackTrace();
             }
         }));
+
+        try {
+            UIManager.setLookAndFeel("com.formdev.flatlaf.FlatLightLaf");
+        } catch (Exception ex) {
+            // this should not happen but just in case...
+        }
 
         new AppUI();
     }

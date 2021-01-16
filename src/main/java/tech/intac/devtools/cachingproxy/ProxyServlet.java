@@ -15,7 +15,10 @@ import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.util.Date;
+import java.util.HashMap;
+import java.util.Map;
 import java.util.Properties;
+import java.util.stream.Collectors;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
@@ -25,6 +28,9 @@ import javax.servlet.http.HttpServletResponse;
 import org.apache.commons.io.IOUtils;
 
 public class ProxyServlet extends HttpServlet {
+
+    private final Map<String, String> cachedResponses = new HashMap<>();
+    private final Map<String, Properties> cachedHeaders = new HashMap<>();
 
     protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         var config = Config.getInstance();
@@ -50,22 +56,30 @@ public class ProxyServlet extends HttpServlet {
             return;
         }
 
-        var cacheFolderName = LocalCacheResolver.generateCacheFolderName(request, requestMethod, reqBody);
-        var localPath = LocalCacheResolver.resolve(new URL(config.getBaseUrl() + request.getRequestURI()));
+        var reqCacheFolder = LocalCacheResolver.generateCacheFolderName(request, reqBody);
+        var reqCacheParentFolder = LocalCacheResolver.resolve(new URL(config.getBaseUrl() + request.getRequestURI()));
 
-        var localResponseFolder = config.
-                getLocalOverridesPath().resolve(localPath)
-                .resolve(cacheFolderName);
+        var reqCacheAbsoluteFolder = config.getLocalOverridesPath()
+                .resolve(reqCacheParentFolder)
+                .resolve(reqCacheFolder);
 
-        if (!Files.exists(localResponseFolder)) {
-            localResponseFolder.toFile().mkdirs();
+        if (!Files.exists(reqCacheAbsoluteFolder)) {
+            reqCacheAbsoluteFolder.toFile().mkdirs();
         }
 
-        var cachedRespHeadersPath = localResponseFolder.resolve("response_headers");
-        var cachedRespContentPath = localResponseFolder.resolve("response_body");
+        // check from in-memory cache
+        String inMemCacheId = reqCacheAbsoluteFolder.toString();
+        if (cachedResponses.containsKey(inMemCacheId)) {
+            cachedHeaders.get(inMemCacheId).forEach((k, v) -> response.setHeader(k.toString(), v.toString()));
+            response.getWriter().println(cachedResponses.get(inMemCacheId));
+            return;
+        }
+
+        var cachedRespHeadersPath = reqCacheAbsoluteFolder.resolve("response_headers");
+        var cachedRespContentPath = reqCacheAbsoluteFolder.resolve("response_body");
         var cachedRespHeaders = new Properties();
 
-        if (Files.exists(localResponseFolder)) {
+        if (Files.exists(reqCacheAbsoluteFolder)) {
             if (Files.exists(cachedRespHeadersPath)) {
                 try (var reader = new FileReader(cachedRespHeadersPath.toFile())) {
                     cachedRespHeaders.load(reader);
@@ -86,11 +100,15 @@ public class ProxyServlet extends HttpServlet {
             // cache the response headers
             try (OutputStream os = new FileOutputStream(cachedRespHeadersPath.toFile())) {
                 cachedRespHeaders.store(os, "cached headers @ " + new Date());
+                cachedHeaders.put(inMemCacheId, cachedRespHeaders);
             }
+
+            String responseBody = IOUtils.readLines(remoteResponse.body()).stream().map(String::strip).collect(Collectors.joining(""));
+            cachedResponses.put(inMemCacheId, responseBody);
 
             // cache the response
             try (OutputStream os = new FileOutputStream(cachedRespContentPath.toFile())) {
-                IOUtils.copyLarge(remoteResponse.body(), os);
+                IOUtils.copyLarge(new ByteArrayInputStream(responseBody.getBytes(StandardCharsets.UTF_8)), os);
             }
 
             // send the file to the http request
@@ -99,8 +117,8 @@ public class ProxyServlet extends HttpServlet {
             }
 
             // store the request details
-            var cachedReqHeadersPath = localResponseFolder.resolve("request_headers");
-            var cachedReqContentPath = localResponseFolder.resolve("request_body");
+            var cachedReqHeadersPath = reqCacheAbsoluteFolder.resolve("request_headers");
+            var cachedReqContentPath = reqCacheAbsoluteFolder.resolve("request_body");
             var cachedReqHeaders = new Properties();
 
             request.getHeaderNames().asIterator()

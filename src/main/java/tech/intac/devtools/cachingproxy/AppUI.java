@@ -1,6 +1,8 @@
 package tech.intac.devtools.cachingproxy;
 
 import java.awt.*;
+import java.io.IOException;
+import java.nio.file.Files;
 
 import javax.swing.*;
 import javax.swing.border.TitledBorder;
@@ -15,17 +17,33 @@ public class AppUI {
     private JCheckBox chkCacheGet;
     private JCheckBox chkCachePost;
     private JButton btnSave;
+    private JButton btnResetCache;
+    private JButton btnMapLocal;
 
     public AppUI() {
         var config = Config.getInstance();
 
-        btnSave.addActionListener((e) -> {
+        btnSave.addActionListener(e -> {
             config.setBaseUrl(txtBaseUrl.getText());
             config.setCacheGetRequests(chkCacheGet.isSelected());
             config.setCachePostRequests(chkCachePost.isSelected());
             config.save();
 
             MsgBox.info(pnlContent, "Config updated.");
+        });
+
+        btnResetCache.addActionListener(e -> {
+            try {
+                Files.deleteIfExists(config.getLocalOverridesPath());
+                MsgBox.info(pnlContent, "Local cache cleared.");
+            } catch (IOException ex) {
+                ex.printStackTrace();
+                MsgBox.err(pnlContent, "Failed to reset cache. Please check the logs for details");
+            }
+        });
+
+        btnMapLocal.addActionListener(e -> {
+            MsgBox.info(pnlContent, "Not yet implemented.");
         });
 
         txtBaseUrl.setText(config.getBaseUrl());
@@ -78,13 +96,19 @@ public class AppUI {
         chkCachePost.setText("Cache POST Requests?");
         panel1.add(chkCachePost, new GridConstraints(2, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         final JPanel panel2 = new JPanel();
-        panel2.setLayout(new GridLayoutManager(1, 2, new Insets(0, 0, 0, 0), -1, -1));
+        panel2.setLayout(new GridLayoutManager(1, 4, new Insets(10, 0, 0, 0), -1, -1));
         pnlContent.add(panel2, BorderLayout.SOUTH);
         btnSave = new JButton();
         btnSave.setText("Save");
-        panel2.add(btnSave, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        panel2.add(btnSave, new GridConstraints(0, 3, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         final Spacer spacer2 = new Spacer();
-        panel2.add(spacer2, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, 1, null, null, null, 0, false));
+        panel2.add(spacer2, new GridConstraints(0, 2, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_WANT_GROW, 1, null, null, null, 0, false));
+        btnResetCache = new JButton();
+        btnResetCache.setText("Reset Cache");
+        panel2.add(btnResetCache, new GridConstraints(0, 0, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
+        btnMapLocal = new JButton();
+        btnMapLocal.setText("Map Local Path");
+        panel2.add(btnMapLocal, new GridConstraints(0, 1, 1, 1, GridConstraints.ANCHOR_CENTER, GridConstraints.FILL_HORIZONTAL, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
     }
 
     /**
