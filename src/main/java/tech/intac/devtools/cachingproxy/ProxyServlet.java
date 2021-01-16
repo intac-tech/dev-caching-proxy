@@ -10,7 +10,6 @@ import java.io.OutputStream;
 import java.net.URI;
 import java.net.URL;
 import java.net.http.HttpClient;
-import java.net.http.HttpRequest;
 import java.net.http.HttpResponse;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
@@ -18,7 +17,6 @@ import java.util.Date;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.Properties;
-import java.util.stream.Collectors;
 
 import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
@@ -27,12 +25,16 @@ import javax.servlet.http.HttpServletResponse;
 
 import org.apache.commons.io.IOUtils;
 
+import static java.net.http.HttpRequest.BodyPublishers;
+import static java.net.http.HttpRequest.newBuilder;
+
 public class ProxyServlet extends HttpServlet {
 
     private final Map<String, String> cachedResponses = new HashMap<>();
     private final Map<String, Properties> cachedHeaders = new HashMap<>();
 
-    protected void doGet(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+    @Override
+    protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
         var config = Config.getInstance();
         var requestMethod = request.getMethod().toLowerCase();
         var reqBody = String.join("\n", IOUtils.readLines(request.getInputStream()));
@@ -103,18 +105,19 @@ public class ProxyServlet extends HttpServlet {
                 cachedHeaders.put(inMemCacheId, cachedRespHeaders);
             }
 
-            String responseBody = IOUtils.readLines(remoteResponse.body()).stream().map(String::strip).collect(Collectors.joining(""));
-            cachedResponses.put(inMemCacheId, responseBody);
-
             // cache the response
             try (OutputStream os = new FileOutputStream(cachedRespContentPath.toFile())) {
-                IOUtils.copyLarge(new ByteArrayInputStream(responseBody.getBytes(StandardCharsets.UTF_8)), os);
+                IOUtils.copyLarge(remoteResponse.body(), os);
             }
 
             // send the file to the http request
             try (InputStream is = new FileInputStream(cachedRespContentPath.toFile())) {
                 IOUtils.copyLarge(is, response.getOutputStream());
             }
+
+            // cache the response in memory
+            String content = Files.readString(cachedRespContentPath);
+            cachedResponses.put(inMemCacheId, content);
 
             // store the request details
             var cachedReqHeadersPath = reqCacheAbsoluteFolder.resolve("request_headers");
@@ -145,13 +148,21 @@ public class ProxyServlet extends HttpServlet {
         var remoteUri = new URI(config.getBaseUrl() + request.getRequestURI() +
                 (request.getQueryString() != null ? "?" + request.getQueryString() : ""));
 
-        var reqbldr = HttpRequest.newBuilder()
+        var reqbldr = newBuilder()
                 .uri(remoteUri);
 
-        if (request.getMethod().equalsIgnoreCase("get")) {
-            reqbldr.GET();
-        } else {
-            reqbldr.POST(HttpRequest.BodyPublishers.ofString(reqBody));
+        switch (request.getMethod().toLowerCase()) {
+            case "get":
+                reqbldr.GET();
+                break;
+            case "post":
+                reqbldr.POST(BodyPublishers.ofString(reqBody));
+                break;
+            case "head":
+                reqbldr.method("HEAD", BodyPublishers.noBody());
+                break;
+            default:
+                // no-op
         }
 
         request.getHeaderNames().asIterator()

@@ -24,9 +24,8 @@ public class JettyServer {
         server.setConnectors(new Connector[]{connector});
 
         var servletHandler = new ServletHandler();
+        servletHandler.addServletWithMapping(ProxyServlet.class, "/*");
         server.setHandler(servletHandler);
-
-        servletHandler.addServletWithMapping(ProxyServlet.class, "/");
 
         server.start();
 
