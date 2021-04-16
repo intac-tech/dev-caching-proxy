@@ -34,9 +34,12 @@ public class AppUI {
 
         btnResetCache.addActionListener(e -> {
             try {
-                Files.deleteIfExists(config.getLocalOverridesPath());
-                MsgBox.info(pnlContent, "Local cache cleared.");
-            } catch (IOException ex) {
+                // delegate to the OS for faster processing
+                Desktop.getDesktop().moveToTrash(config.getLocalOverridesPath().toFile());
+                ProxyServlet.cachedContent.clear();
+                ProxyServlet.cachedHeaders.clear();
+                MsgBox.info(pnlContent, "Local cache moved trash.");
+            } catch (Exception ex) {
                 ex.printStackTrace();
                 MsgBox.err(pnlContent, "Failed to reset cache. Please check the logs for details");
             }
