@@ -15,7 +15,6 @@ public class AppUI {
     private JPanel pnlContent;
     private JTextField txtBaseUrl;
     private JCheckBox chkCacheGet;
-    private JCheckBox chkCachePost;
     private JButton btnSave;
     private JButton btnResetCache;
     private JButton btnMapLocal;
@@ -26,7 +25,6 @@ public class AppUI {
         btnSave.addActionListener(e -> {
             config.setBaseUrl(txtBaseUrl.getText());
             config.setCacheGetRequests(chkCacheGet.isSelected());
-            config.setCachePostRequests(chkCachePost.isSelected());
             config.save();
 
             MsgBox.info(pnlContent, "Config updated.");
@@ -35,10 +33,9 @@ public class AppUI {
         btnResetCache.addActionListener(e -> {
             try {
                 // delegate to the OS for faster processing
-                Desktop.getDesktop().moveToTrash(config.getLocalOverridesPath().toFile());
                 ProxyServlet.cachedContent.clear();
                 ProxyServlet.cachedHeaders.clear();
-                MsgBox.info(pnlContent, "Local cache moved trash.");
+                MsgBox.info(pnlContent, "In-memory cache cleared.");
             } catch (Exception ex) {
                 ex.printStackTrace();
                 MsgBox.err(pnlContent, "Failed to reset cache. Please check the logs for details");
@@ -51,7 +48,6 @@ public class AppUI {
 
         txtBaseUrl.setText(config.getBaseUrl());
         chkCacheGet.setSelected(config.isCacheGetRequests());
-        chkCachePost.setSelected(config.isCachePostRequests());
 
         var frame = new JFrame("Dev Proxy Server v1.0");
         frame.setContentPane(pnlContent);
@@ -95,9 +91,6 @@ public class AppUI {
         chkCacheGet = new JCheckBox();
         chkCacheGet.setText("Cache GET Requests?");
         panel1.add(chkCacheGet, new GridConstraints(1, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
-        chkCachePost = new JCheckBox();
-        chkCachePost.setText("Cache POST Requests?");
-        panel1.add(chkCachePost, new GridConstraints(2, 1, 1, 1, GridConstraints.ANCHOR_WEST, GridConstraints.FILL_NONE, GridConstraints.SIZEPOLICY_CAN_SHRINK | GridConstraints.SIZEPOLICY_CAN_GROW, GridConstraints.SIZEPOLICY_FIXED, null, null, null, 0, false));
         final JPanel panel2 = new JPanel();
         panel2.setLayout(new GridLayoutManager(1, 4, new Insets(10, 0, 0, 0), -1, -1));
         pnlContent.add(panel2, BorderLayout.SOUTH);
