@@ -51,6 +51,7 @@ public class AppUI {
 
         var frame = new JFrame("Dev Proxy Server v1.0");
         frame.setContentPane(pnlContent);
+        frame.getRootPane().setDefaultButton(btnSave);
         frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
         frame.pack();
         frame.setLocationRelativeTo(null);

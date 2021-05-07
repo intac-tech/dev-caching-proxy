@@ -13,17 +13,23 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.nio.file.Paths;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+
 public class Config implements Serializable {
 
     private static final long serialVersionUID = 1L;
 
-    private static final String configFileName = "app.config";
+    private static final String configFileName = "app.config.json";
 
     private static final Path configPath;
 
     private static final Config instance;
 
+    private static final ObjectMapper objectMapper;
+
     static {
+        objectMapper = new ObjectMapper();
+
         Path resolvedConfigPath = null;
         Config config = null;
 
@@ -37,8 +43,7 @@ public class Config implements Serializable {
             }
 
             try (InputStream is = new FileInputStream(resolvedConfigPath.toFile())) {
-                ObjectInputStream ois = new ObjectInputStream(is);
-                config = (Config) ois.readObject();
+                config = objectMapper.readValue(is, Config.class);
             }
         } catch (Exception ex) {
             ex.printStackTrace();
@@ -75,8 +80,7 @@ public class Config implements Serializable {
         }
 
         try (OutputStream os = new FileOutputStream(configPath.toFile())) {
-            ObjectOutputStream oos = new ObjectOutputStream(os);
-            oos.writeObject(this);
+            objectMapper.writerWithDefaultPrettyPrinter().writeValue(os, this);
         } catch (IOException e) {
             e.printStackTrace();
         }
