@@ -52,7 +52,7 @@ public class Config implements Serializable {
         configPath = resolvedConfigPath;
 
         if (config == null) {
-            config = new Config();
+            config = new Config(configPath);
         }
 
         instance = config;
@@ -71,6 +71,9 @@ public class Config implements Serializable {
     private boolean cachePostRequests = false;
 
     private Config() {
+    }
+
+    private Config(Path configPath) {
         _localOverridesPath = configPath.resolveSibling("cache").toString();
     }
 
