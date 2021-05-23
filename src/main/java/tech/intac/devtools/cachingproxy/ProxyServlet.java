@@ -14,7 +14,6 @@ import java.util.Map;
 import java.util.Properties;
 import java.util.stream.Collectors;
 
-import javax.servlet.ServletException;
 import javax.servlet.http.HttpServlet;
 import javax.servlet.http.HttpServletRequest;
 import javax.servlet.http.HttpServletResponse;
@@ -31,10 +30,10 @@ public class ProxyServlet extends HttpServlet {
 
     @SuppressWarnings("Convert2MethodRef")
     @Override
-    protected void service(HttpServletRequest request, HttpServletResponse response) throws ServletException, IOException {
+    protected void service(HttpServletRequest request, HttpServletResponse response) throws IOException {
         var config = Config.getInstance();
         var requestMethod = request.getMethod().toLowerCase();
-        var reqBody = String.join("\n", IOUtils.readLines(request.getInputStream()));
+        var reqBody = String.join("\n", IOUtils.readLines(request.getInputStream(), StandardCharsets.UTF_8));
 
         checkIfPassThrough:
         {
@@ -48,6 +47,7 @@ public class ProxyServlet extends HttpServlet {
 
             try {
                 var remoteResponse = sendRemoteRequest(config, request, reqBody);
+                remoteResponse.headers().map().forEach((k, valueList) -> valueList.forEach(v -> response.addHeader(k, v)));
                 IOUtils.copyLarge(remoteResponse.body(), response.getOutputStream());
             } catch (Exception e) {
                 throw new RuntimeException(e);
@@ -108,18 +108,18 @@ public class ProxyServlet extends HttpServlet {
         var remoteUri = new URI(config.getBaseUrl() + request.getRequestURI() +
                 (request.getQueryString() != null ? "?" + request.getQueryString() : ""));
 
-        var reqbldr = newBuilder()
+        var reqBuilder = newBuilder()
                 .uri(remoteUri);
 
         switch (request.getMethod().toLowerCase()) {
             case "get":
-                reqbldr.GET();
+                reqBuilder.GET();
                 break;
             case "post":
-                reqbldr.POST(BodyPublishers.ofString(reqBody));
+                reqBuilder.POST(BodyPublishers.ofString(reqBody));
                 break;
             case "head":
-                reqbldr.method("HEAD", BodyPublishers.noBody());
+                reqBuilder.method("HEAD", BodyPublishers.noBody());
                 break;
             default:
                 // no-op
@@ -129,12 +129,12 @@ public class ProxyServlet extends HttpServlet {
                 .forEachRemaining(headerName -> {
                     try {
                         var value = request.getHeader(headerName);
-                        reqbldr.header(headerName, value);
+                        reqBuilder.header(headerName, value);
                     } catch (Exception ex) {
                         // do nothing
                     }
                 });
 
-        return client.send(reqbldr.build(), HttpResponse.BodyHandlers.ofInputStream());
+        return client.send(reqBuilder.build(), HttpResponse.BodyHandlers.ofInputStream());
     }
 }
